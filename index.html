@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Devil Boss Fight</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    touch-action: none;
+  }
+  canvas { display: block; }
+
+  #ui {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ── Health bars ── */
+  #player-hp-wrap {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    width: 88%; max-width: 420px;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,60,60,0.45);
+    border-radius: 8px;
+    padding: 4px 8px 5px;
+    backdrop-filter: blur(6px);
+  }
+  #player-hp-label { color: #ff4444; font-size: 11px; letter-spacing: 1px; margin-bottom: 3px; }
+  #player-hp-bar-bg {
+    width: 100%; height: 10px; background: rgba(255,0,0,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+  #player-hp-bar {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #ff1a1a, #ff6060);
+    border-radius: 4px;
+    transition: width 0.15s;
+    box-shadow: 0 0 6px #ff0000aa;
+  }
+
+  #boss-hp-wrap {
+    position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 88%; max-width: 420px;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(160,0,255,0.45);
+    border-radius: 8px;
+    padding: 4px 8px 5px;
+    backdrop-filter: blur(6px);
+  }
+  #boss-hp-label { color: #cc44ff; font-size: 11px; letter-spacing: 1px; margin-bottom: 3px; }
+  #boss-hp-bar-bg {
+    width: 100%; height: 10px; background: rgba(140,0,255,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+  #boss-hp-bar {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #8800ff, #cc44ff);
+    border-radius: 4px;
+    transition: width 0.3s;
+    box-shadow: 0 0 6px #aa00ffaa;
+  }
+
+  /* ── Phase name display ── */
+  #phase-display {
+    position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,200,255,0.7);
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 8px #aa44ff;
+    pointer-events: none;
+  }
+
+  /* ── Overlay screens ── */
+  .screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .screen.hidden { display: none; }
+
+  /* Start screen */
+  #start-screen {
+    background: radial-gradient(ellipse at center, #1a001a 0%, #000 70%);
+  }
+  #start-screen .flames {
+    position: absolute; bottom: 0; width: 100%; height: 40%;
+    background: linear-gradient(0deg, #ff2200cc 0%, #ff660044 40%, transparent 100%);
+    filter: blur(8px);
+    animation: flicker 1.5s infinite alternate;
+  }
+  @keyframes flicker {
+    0%   { opacity: 0.7; transform: scaleY(1); }
+    100% { opacity: 1;   transform: scaleY(1.06); }
+  }
+  #start-screen h1 {
+    font-size: clamp(18px, 5vw, 28px);
+    color: #ff2200;
+    text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000;
+    text-align: center;
+    padding: 0 24px;
+    line-height: 1.4;
+    z-index: 1;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000; }
+    50%      { text-shadow: 0 0 30px #ff6600, 0 0 60px #ff6600; }
+  }
+  #start-btn {
+    margin-top: 48px; z-index: 1;
+    padding: 16px 36px;
+    font-size: 18px; font-family: 'Courier New', monospace; font-weight: bold;
+    color: #ff2200;
+    background: rgba(255,34,0,0.1);
+    border: 2px solid #ff2200;
+    border-radius: 8px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 20px #ff220055, inset 0 0 20px #ff220011;
+    transition: all 0.2s;
+    pointer-events: all;
+    letter-spacing: 1px;
+  }
+  #start-btn:active {
+    background: rgba(255,34,0,0.3);
+    box-shadow: 0 0 40px #ff2200aa;
+  }
+
+  /* Phase transition */
+  #phase-screen {
+    background: #000;
+    animation: phaseIn 0.3s ease;
+  }
+  @keyframes phaseIn { from { opacity: 0; } to { opacity: 1; } }
+  #phase-screen .phase-name {
+    font-size: clamp(32px, 10vw, 56px);
+    font-weight: bold;
+    letter-spacing: 4px;
+    animation: glitch 0.5s infinite;
+  }
+  @keyframes glitch {
+    0%,90%,100% { transform: translate(0); text-shadow: 0 0 20px currentColor; }
+    92% { transform: translate(-3px, 1px); }
+    95% { transform: translate(3px, -1px); filter: hue-rotate(90deg); }
+    97% { transform: translate(-2px, 2px); }
+  }
+  #phase-screen .phase-sub {
+    margin-top: 12px;
+    font-size: 14px; letter-spacing: 3px; opacity: 0.6;
+  }
+
+  /* Game over */
+  #gameover-screen {
+    background: radial-gradient(ellipse at center, #1a0000 0%, #000 70%);
+  }
+  #gameover-screen h2 {
+    font-size: clamp(36px, 12vw, 64px);
+    color: #ff1111;
+    text-shadow: 0 0 30px #ff0000;
+    letter-spacing: 4px;
+  }
+  #restart-btn {
+    margin-top: 40px;
+    padding: 14px 32px;
+    font-size: 16px; font-family: 'Courier New', monospace;
+    color: #fff;
+    background: rgba(255,0,0,0.15);
+    border: 2px solid #ff2200;
+    border-radius: 8px;
+    cursor: pointer;
+    pointer-events: all;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 20px #ff220055;
+    letter-spacing: 2px;
+  }
+
+  /* Video ending */
+  #ending-screen {
+    background: #000;
+  }
+  #ending-video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<!-- UI overlays -->
+<div id="ui">
+  <div id="boss-hp-wrap">
+    <div id="boss-hp-label">BOSS HP</div>
+    <div id="boss-hp-bar-bg"><div id="boss-hp-bar"></div></div>
+  </div>
+  <div id="phase-display">PHASE 1 — TITO</div>
+  <div id="player-hp-wrap">
+    <div id="player-hp-label">HP ❤️</div>
+    <div id="player-hp-bar-bg"><div id="player-hp-bar"></div></div>
+  </div>
+</div>
+
+<!-- Start screen -->
+<div class="screen" id="start-screen">
+  <div class="flames"></div>
+  <h1>В ТЕБЕ ВСЕ ЩЕ Є ШАНС!<br>КРАЩЕ НЕ НАТИСКАЙ!</h1>
+  <button id="start-btn" onclick="startGame()">▶ ГРАТИ</button>
+</div>
+
+<!-- Phase transition screen -->
+<div class="screen hidden" id="phase-screen">
+  <div class="phase-name" id="phase-name-text"></div>
+  <div class="phase-sub" id="phase-sub-text"></div>
+</div>
+
+<!-- Game Over screen -->
+<div class="screen hidden" id="gameover-screen">
+  <h2>GAME OVER</h2>
+  <button id="restart-btn" onclick="restartGame()">↺ ЗНОВУ</button>
+</div>
+
+<!-- Ending video screen -->
+<div class="screen hidden" id="ending-screen">
+  <video id="ending-video" src="End.mp4" playsinline autoplay muted></video>
+</div>
+
+<audio id="music" src="Music.mp3" loop></audio>
+<audio id="music5" src="5.mp3"></audio>
+
+<script>
+// ─────────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────────
+const PHASES = [
+  { name: 'TITO',        sub: 'ФАЗА 1',  img: 'Tito.png',    color: '#ff6600', duration: 30 },
+  { name: 'SMARTIK',     sub: 'ФАЗА 2',  img: 'Smartik.png', color: '#00ccff', duration: 30 },
+  { name: 'JUNIOR',      sub: 'ФАЗА 3',  img: 'Junior.png',  color: '#00ff88', duration: 30 },
+  { name: 'FIL', sub: 'ФАЗА 4',  img: 'Fil.png',     color: '#ff44cc', duration: 30 },
+  { name: 'MILKA',       sub: 'ФАЗА 5 — ФІНАЛ', img: 'Milka.png',  color: '#ffffff', duration: 30 },
+];
+const PLAYER_MAX_HP = 50;
+const PLAYER_SIZE   = 36;
+const DEVIL_HEIGHT  = 110;
+
+// ─────────────────────────────────────────────
+//  CANVAS SETUP
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─────────────────────────────────────────────
+//  IMAGE LOADING
+// ─────────────────────────────────────────────
+const imgs = {};
+['DEVIL','Tito','Smartik','Junior','Fil','Milka'].forEach(n => {
+  const im = new Image();
+  im.src = n + '.png';
+  imgs[n] = im;
+});
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+let state = 'start'; // start | transition | game | gameover | ending
+let phaseIdx = 0;
+let phaseTimer = 0;
+let phaseTransTimer = 0;
+const TRANS_DUR = 2.5; // seconds for phase transition screen
+
+let playerHP = PLAYER_MAX_HP;
+let playerX  = 0;
+let playerTargetX = 0;
+let invincibleTimer = 0;
+
+let projectiles = [];
+let spawnTimer   = 0;
+let particles    = [];
+
+let bossGlow = 0;
+let animT    = 0;
+
+let music    = document.getElementById('music');
+let music5   = document.getElementById('music5');
+let finalMusicStarted = false;
+
+// ─────────────────────────────────────────────
+//  TOUCH CONTROLS
+// ─────────────────────────────────────────────
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (state === 'game') {
+    playerTargetX = e.touches[0].clientX;
+  }
+}, { passive: false });
+canvas.addEventListener('touchstart', e => {
+  if (state === 'game') playerTargetX = e.touches[0].clientX;
+}, { passive: false });
+canvas.addEventListener('mousemove', e => {
+  if (state === 'game') playerTargetX = e.clientX;
+});
+
+// ─────────────────────────────────────────────
+//  GAME CONTROL
+// ─────────────────────────────────────────────
+function startGame() {
+  document.getElementById('start-screen').classList.add('hidden');
+  projectiles = []; particles = [];
+  phaseIdx = 0; phaseTimer = 0;
+  playerHP = PLAYER_MAX_HP;
+  finalMusicStarted = false;
+  music.currentTime = 0;
+  music.play().catch(()=>{});
+  showPhaseTransition();
+}
+
+function restartGame() {
+  document.getElementById('gameover-screen').classList.add('hidden');
+  projectiles = []; particles = [];
+  phaseIdx = 0; phaseTimer = 0;
+  playerHP = PLAYER_MAX_HP;
+  finalMusicStarted = false;
+  music5.pause(); music5.currentTime = 0;
+  music.currentTime = 0;
+  music.play().catch(()=>{});
+  showPhaseTransition();
+}
+
+function showPhaseTransition() {
+  state = 'transition';
+  phaseTransTimer = TRANS_DUR;
+  const p = PHASES[phaseIdx];
+  const ps = document.getElementById('phase-screen');
+  const pn = document.getElementById('phase-name-text');
+  const psub = document.getElementById('phase-sub-text');
+  pn.textContent = p.name;
+  pn.style.color = p.color;
+  pn.style.textShadow = `0 0 30px ${p.color}, 0 0 60px ${p.color}`;
+  psub.textContent = p.sub;
+  psub.style.color = p.color;
+  ps.classList.remove('hidden');
+  document.getElementById('phase-display').textContent = p.sub + ' — ' + p.name;
+}
+
+function beginPhase() {
+  document.getElementById('phase-screen').classList.add('hidden');
+  projectiles = [];
+  state = 'game';
+  playerX = W / 2;
+  playerTargetX = W / 2;
+
+  if (phaseIdx === 4 && !finalMusicStarted) {
+    finalMusicStarted = true;
+    music.pause();
+    music5.currentTime = 0;
+    music5.play().catch(()=>{});
+    music5.addEventListener('ended', triggerEnding, { once: true });
+  }
+  updateHPBars();
+}
+
+function triggerEnding() {
+  state = 'ending';
+  document.getElementById('ending-screen').classList.remove('hidden');
+  const v = document.getElementById('ending-video');
+  v.muted = false;
+  v.play().catch(()=>{});
+  v.addEventListener('ended', () => {
+    window.location.href = 'https://platon-lab.github.io/ABSOLUTE-END/';
+  }, { once: true });
+  // fallback
+  setTimeout(() => {
+    window.location.href = 'https://platon-lab.github.io/ABSOLUTE-END/';
+  }, 35000);
+}
+
+function advancePhase() {
+  phaseIdx++;
+  if (phaseIdx >= PHASES.length) {
+    triggerEnding();
+    return;
+  }
+  showPhaseTransition();
+}
+
+function gameOver() {
+  state = 'gameover';
+  music.pause();
+  music5.pause();
+  document.getElementById('gameover-screen').classList.remove('hidden');
+}
+
+// ─────────────────────────────────────────────
+//  HP BARS
+// ─────────────────────────────────────────────
+function updateHPBars() {
+  const pct = Math.max(0, playerHP / PLAYER_MAX_HP * 100);
+  document.getElementById('player-hp-bar').style.width = pct + '%';
+
+  // boss hp: decreases as phases advance + time within phase
+  const totalPhases = PHASES.length;
+  const bossProgress = (phaseIdx / totalPhases) + (phaseTimer / PHASES[phaseIdx]?.duration || 0) / totalPhases;
+  const bossPct = Math.max(0, (1 - bossProgress) * 100);
+  document.getElementById('boss-hp-bar').style.width = bossPct + '%';
+}
+
+// ─────────────────────────────────────────────
+//  PROJECTILE SPAWNING
+// ─────────────────────────────────────────────
+function spawnProjectiles(dt) {
+  spawnTimer -= dt;
+  if (spawnTimer > 0) return;
+
+  const phase = PHASES[phaseIdx];
+  const speedMult = 1 + phaseIdx * 0.3;
+  const color     = phase.color;
+
+  if (phaseIdx === 0) {
+    // Phase 1 – basic circles, spikes, fire
+    spawnTimer = 0.55;
+    const type = Math.random() < 0.5 ? 'circle' : (Math.random() < 0.5 ? 'spike' : 'fire');
+    projectiles.push({
+      x: Math.random() * (W - 40) + 20,
+      y: DEVIL_HEIGHT + 30,
+      vx: (Math.random() - 0.5) * 80,
+      vy: 180 * speedMult,
+      r: type === 'spike' ? 10 : 9,
+      type, color,
+      sine: false, t: 0
+    });
+
+  } else if (phaseIdx === 1) {
+    // Phase 2 – sine waves, diagonals
+    spawnTimer = 0.38;
+    const diag = Math.random() < 0.4;
+    projectiles.push({
+      x: Math.random() * (W - 40) + 20,
+      y: DEVIL_HEIGHT + 30,
+      vx: diag ? (Math.random() > 0.5 ? 120 : -120) : 0,
+      vy: 160 * speedMult,
+      r: 8, type: 'circle', color,
+      sine: true, sineAmp: 60 + Math.random() * 40, sineFreq: 2 + Math.random(),
+      t: 0
+    });
+
+  } else if (phaseIdx === 2) {
+    // Phase 3 – faster, more
+    spawnTimer = 0.22;
+    for (let i = 0; i < 2; i++) {
+      projectiles.push({
+        x: Math.random() * (W - 40) + 20,
+        y: DEVIL_HEIGHT + 30,
+        vx: (Math.random() - 0.5) * 140,
+        vy: (200 + Math.random() * 60) * speedMult,
+        r: 7, type: Math.random() < 0.3 ? 'spike' : 'circle', color,
+        sine: false, t: 0
+      });
+    }
+
+  } else if (phaseIdx === 3) {
+    // Phase 4 – sides + top
+    spawnTimer = 0.18;
+    const side = Math.random();
+    if (side < 0.33) {
+      // from left
+      projectiles.push({ x: 0, y: DEVIL_HEIGHT + 30 + Math.random() * (H * 0.4), vx: (180 + Math.random()*60)*speedMult, vy: (Math.random()-0.3)*80, r: 8, type:'circle', color, sine:false, t:0 });
+    } else if (side < 0.66) {
+      // from right
+      projectiles.push({ x: W, y: DEVIL_HEIGHT + 30 + Math.random() * (H * 0.4), vx: -(180 + Math.random()*60)*speedMult, vy: (Math.random()-0.3)*80, r: 8, type:'circle', color, sine:false, t:0 });
+    } else {
+      // from top (spread)
+      for (let i = 0; i < 2; i++) {
+        projectiles.push({ x: Math.random()*(W-40)+20, y: DEVIL_HEIGHT+30, vx:(Math.random()-0.5)*100, vy:(190+Math.random()*50)*speedMult, r:7, type:'spike', color, sine:false, t:0 });
+      }
+    }
+
+  } else {
+    // Phase 5 – bullet hell
+    spawnTimer = 0.08;
+    const count = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI; // downward hemisphere
+      const spd   = (220 + Math.random() * 100) * speedMult;
+      projectiles.push({
+        x: Math.random() * W,
+        y: DEVIL_HEIGHT + 20,
+        vx: Math.cos(angle) * spd * (Math.random() - 0.5) * 2,
+        vy: Math.abs(Math.sin(angle)) * spd,
+        r: 6, type: Math.random() < 0.4 ? 'spike' : 'circle', color,
+        sine: Math.random() < 0.3, sineAmp: 30, sineFreq: 3,
+        t: Math.random() * Math.PI * 2
+      });
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  PARTICLES
+// ─────────────────────────────────────────────
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd   = 40 + Math.random() * 80;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd,
+      r: 2 + Math.random() * 3,
+      life: 0.5 + Math.random() * 0.3,
+      maxLife: 0.5 + Math.random() * 0.3,
+      color
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+//  DRAWING
+// ─────────────────────────────────────────────
+function drawBackground() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // subtle scanlines
+  for (let y = 0; y < H; y += 4) {
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(0, y, W, 1);
+  }
+
+  // phase color ambient glow at edges
+  const col = PHASES[Math.min(phaseIdx, PHASES.length-1)].color;
+  const grad = ctx.createRadialGradient(W/2, 0, 0, W/2, 0, W);
+  grad.addColorStop(0, hexToRgba(col, 0.08));
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H * 0.5);
+}
+
+function hexToRgba(hex, a) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function drawDevil() {
+  const dw = Math.min(W * 0.55, 200);
+  const dh = DEVIL_HEIGHT;
+  const dx = W / 2 - dw / 2;
+
+  // glow
+  ctx.save();
+  ctx.shadowColor = '#cc0000';
+  ctx.shadowBlur  = 18 + Math.sin(animT * 3) * 6;
+  if (imgs['DEVIL'].complete && imgs['DEVIL'].naturalWidth > 0) {
+    ctx.drawImage(imgs['DEVIL'], dx, 4, dw, dh);
+  } else {
+    ctx.fillStyle = '#aa0000';
+    ctx.fillRect(dx, 4, dw, dh);
+    ctx.fillStyle = '#ff4400';
+    ctx.font = 'bold 28px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('👿', W/2, 60);
+  }
+  ctx.restore();
+}
+
+function drawCharacter() {
+  const p = PHASES[phaseIdx];
+  const cw = Math.min(W * 0.22, 80);
+  const ch = cw * 1.4;
+  const cx = W / 2 - cw / 2;
+  const cy = DEVIL_HEIGHT + 8;
+
+  ctx.save();
+  ctx.shadowColor = p.color;
+  ctx.shadowBlur  = 12;
+  if (imgs[p.img.replace('.png','')] && imgs[p.img.replace('.png','')].complete && imgs[p.img.replace('.png','')].naturalWidth > 0) {
+    ctx.drawImage(imgs[p.img.replace('.png','')], cx, cy, cw, ch);
+  } else {
+    ctx.fillStyle = p.color;
+    ctx.font = '28px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('👾', W/2, cy + ch * 0.6);
+  }
+  ctx.restore();
+}
+
+function drawPlayer() {
+  const py = H - 100;
+  const flash = invincibleTimer > 0 && Math.floor(invincibleTimer * 10) % 2 === 0;
+  if (flash) return;
+
+  ctx.save();
+  ctx.shadowColor = '#00ffff';
+  ctx.shadowBlur  = 14;
+
+  // player body – glowing capsule
+  const pr = PLAYER_SIZE / 2;
+  ctx.beginPath();
+  ctx.arc(playerX, py, pr, 0, Math.PI * 2);
+  ctx.fillStyle = '#00ffff22';
+  ctx.fill();
+  ctx.strokeStyle = '#00ffff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // crosshair dots
+  ctx.fillStyle = '#00ffff';
+  ctx.beginPath(); ctx.arc(playerX, py, 3, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawProjectile(p) {
+  ctx.save();
+  ctx.shadowColor = p.color;
+  ctx.shadowBlur  = 10;
+
+  if (p.type === 'spike') {
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - p.r * 2);
+    ctx.lineTo(p.x + p.r, p.y + p.r);
+    ctx.lineTo(p.x - p.r, p.y + p.r);
+    ctx.closePath();
+    ctx.fill();
+  } else if (p.type === 'fire') {
+    const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 1.5);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.4, '#ff8800');
+    grad.addColorStop(1, '#ff000000');
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    const alpha = p.life / p.maxLife;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * alpha, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ─────────────────────────────────────────────
+//  MAIN LOOP
+// ─────────────────────────────────────────────
+let lastTime = 0;
+
+function loop(ts) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  animT += dt;
+
+  if (state === 'game') {
+    update(dt);
+  }
+  render();
+}
+
+function update(dt) {
+  // smooth player movement
+  playerX += (playerTargetX - playerX) * Math.min(dt * 14, 1);
+  playerX = Math.max(PLAYER_SIZE/2, Math.min(W - PLAYER_SIZE/2, playerX));
+
+  invincibleTimer = Math.max(0, invincibleTimer - dt);
+
+  // phase timer
+  phaseTimer += dt;
+  if (phaseTimer >= PHASES[phaseIdx].duration) {
+    phaseTimer = 0;
+    advancePhase();
+    return;
+  }
+
+  spawnProjectiles(dt);
+
+  // update projectiles
+  const py = H - 100;
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.t += dt;
+
+    let addX = p.vx * dt;
+    if (p.sine) addX += Math.sin(p.t * (p.sineFreq || 2)) * (p.sineAmp || 50) * dt;
+
+    p.x += addX;
+    p.y += p.vy * dt;
+
+    // wall bounce for side projectiles
+    if (p.x < 0 || p.x > W) p.vx *= -1;
+
+    // remove if off screen
+    if (p.y > H + 20 || p.y < -20) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+
+    // collision
+    if (invincibleTimer <= 0) {
+      const dx = p.x - playerX;
+      const distY = p.y - py;
+      const dist  = Math.sqrt(dx*dx + distY*distY);
+      const hitR  = PLAYER_SIZE / 2 + p.r * 0.7;
+      if (dist < hitR) {
+        playerHP--;
+        invincibleTimer = 0.7;
+        spawnParticles(playerX, py, '#00ffff');
+        projectiles.splice(i, 1);
+        updateHPBars();
+        if (playerHP <= 0) { gameOver(); return; }
+        continue;
+      }
+    }
+  }
+
+  // update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 60 * dt;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  updateHPBars();
+}
+
+function render() {
+  drawBackground();
+
+  if (state === 'game' || state === 'transition') {
+    drawDevil();
+    if (state === 'game') drawCharacter();
+    drawParticles();
+    if (state === 'game') {
+      projectiles.forEach(drawProjectile);
+      drawPlayer();
+    }
+  }
+}
+
+// phase transition auto-advance
+function phaseTransLoop(ts) {
+  if (state !== 'transition') return;
+  requestAnimationFrame(phaseTransLoop);
+}
+// handled in main loop via flag — use timeout instead
+function watchTransition() {
+  if (state === 'transition') {
+    setTimeout(() => {
+      if (state === 'transition') beginPhase();
+      watchTransition();
+    }, 100);
+  } else {
+    setTimeout(watchTransition, 200);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  PHASE TRANSITION TIMING
+// ─────────────────────────────────────────────
+let transCountdown = 0;
+function monitorTransition() {
+  setInterval(() => {
+    if (state === 'transition') {
+      transCountdown += 0.1;
+      if (transCountdown >= TRANS_DUR) {
+        transCountdown = 0;
+        beginPhase();
+      }
+    } else {
+      transCountdown = 0;
+    }
+  }, 100);
+}
+
+// ─────────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────────
+monitorTransition();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
